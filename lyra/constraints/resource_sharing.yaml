@@ -1,0 +1,59 @@
+# Lyra-DRL Constraint Specification — Resource Sharing Domain
+# Compiled automatically by auto_compiler.py via SymPy symbolic differentiation.
+#
+# State variables (index order must match runtime state vector):
+#   0: own_share   — agent's normalised resource share  (0.5 = fair, 1.0 = 2x fair)
+#   1: peer_share  — mean peer normalised resource share
+#   2: pressure    — social pressure signal (fraction of peers taking)
+#   3: compliance  — agent's recent compliance rate
+
+meta:
+  domain: resource_sharing
+  description: >
+    Multi-agent resource allocation under scarcity.
+    Three normative constraints encoding consent, survival, and fairness norms.
+
+state_variables:
+  - {name: own_share,  index: 0, description: "Agent's normalised resource share"}
+  - {name: peer_share, index: 1, description: "Mean peer normalised resource share"}
+  - {name: pressure,   index: 2, description: "Fraction of peers executing take"}
+  - {name: compliance, index: 3, description: "Recent constraint-compliance rate"}
+
+actions:
+  - {index: 0, name: share}
+  - {index: 1, name: split}
+  - {index: 2, name: take}
+  - {index: 3, name: hold}
+
+constraints:
+  - name: consent
+    description: >
+      An agent may not take when it is already ahead of peers.
+      Negative threshold encodes that ANY take incurs violation energy.
+    trigger: {action: take}
+    violation:
+      type: threshold_above
+      expr: "own_share - peer_share"
+      threshold: -0.50
+    weight: 0.5
+
+  - name: survival
+    description: >
+      An agent may not take when peers are already below minimum subsistence.
+    trigger: {action: take}
+    violation:
+      type: threshold_below
+      expr: "peer_share"
+      threshold: 0.10
+    weight: 0.3
+
+  - name: fairness
+    description: >
+      Aggregate inequality (Gini proxy) must remain below threshold.
+      Applies regardless of action.
+    trigger: always
+    violation:
+      type: abs_threshold
+      expr: "own_share - peer_share"
+      threshold: 0.30
+    weight: 0.2

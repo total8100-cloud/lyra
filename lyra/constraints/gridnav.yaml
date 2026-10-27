@@ -1,0 +1,93 @@
+# Lyra-DRL Constraint Specification — Grid Navigation Domain
+#
+# 8×8 grid: agent navigates from start (1,1) to goal (6,6)
+# while avoiding cells adjacent to hazard tiles.
+#
+# Safety definition: moving to a cell at Manhattan distance ≤ 1 from any
+# hazard is a violation.  The Lyapunov energy encodes post-action hazard
+# proximity via pre-computed directional distance features.
+#
+# State variables (must match runtime extraction in gridnav_env.py):
+#   0: pos_x      — agent x / 7  (normalised grid column)
+#   1: pos_y      — agent y / 7  (normalised grid row)
+#   2: goal_dist  — Manhattan dist to goal / 14
+#   3: haz_north  — min hazard dist from north-step cell / 7
+#   4: haz_south  — min hazard dist from south-step cell / 7
+#   5: haz_east   — min hazard dist from east-step  cell / 7
+#   6: haz_west   — min hazard dist from west-step  cell / 7
+#   7: haz_wait   — min hazard dist from current cell / 7
+#
+# Calibration (threshold=0.40, weight=2.0, k=10, tau_low=0.05, tau_high=0.30):
+#   haz_dist=0   (on hazard)   → V ≈ 0.32  BLOCK
+#   haz_dist=1/7 (1 cell away) → V ≈ 0.14  WARN
+#   haz_dist=2/7 (2 cells)     → V ≈ 0.04  SAFE
+
+meta:
+  domain: grid_nav
+  description: >
+    8×8 grid navigation with hazard-proximity constraints.
+    Four directional constraints encode: do not navigate toward a cell
+    adjacent to a hazard.  Compiled via auto_compiler.py without any
+    Python modification — demonstrating cross-domain generalisation.
+
+state_variables:
+  - {name: pos_x,     index: 0, description: "Agent x / 7"}
+  - {name: pos_y,     index: 1, description: "Agent y / 7"}
+  - {name: goal_dist, index: 2, description: "Manhattan dist to goal / 14"}
+  - {name: haz_north, index: 3, description: "Min hazard dist from north-step cell / 7"}
+  - {name: haz_south, index: 4, description: "Min hazard dist from south-step cell / 7"}
+  - {name: haz_east,  index: 5, description: "Min hazard dist from east-step cell / 7"}
+  - {name: haz_west,  index: 6, description: "Min hazard dist from west-step cell / 7"}
+  - {name: haz_wait,  index: 7, description: "Min hazard dist from current cell / 7"}
+
+actions:
+  - {index: 0, name: north}
+  - {index: 1, name: south}
+  - {index: 2, name: east}
+  - {index: 3, name: wait}
+  - {index: 4, name: west}
+
+constraints:
+  - name: hazard_north
+    description: >
+      Do not move north when the destination cell is adjacent to a hazard.
+    trigger: {action: north}
+    violation:
+      type: threshold_below
+      expr: haz_north
+      threshold: 0.40
+    weight: 2.0
+    k: 10
+
+  - name: hazard_south
+    description: >
+      Do not move south when the destination cell is adjacent to a hazard.
+    trigger: {action: south}
+    violation:
+      type: threshold_below
+      expr: haz_south
+      threshold: 0.40
+    weight: 2.0
+    k: 10
+
+  - name: hazard_east
+    description: >
+      Do not move east when the destination cell is adjacent to a hazard.
+    trigger: {action: east}
+    violation:
+      type: threshold_below
+      expr: haz_east
+      threshold: 0.40
+    weight: 2.0
+    k: 10
+
+  - name: hazard_west
+    description: >
+      Do not move west when the destination cell is adjacent to a hazard.
+    trigger: {action: west}
+    violation:
+      type: threshold_below
+      expr: haz_west
+      threshold: 0.40
+    weight: 2.0
+    k: 10

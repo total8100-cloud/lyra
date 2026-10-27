@@ -1,0 +1,60 @@
+# Lyra-DRL Constraint Specification — Information Sharing Domain
+# Second domain demonstrating compiler generalisability WITHOUT any Python coding.
+#
+# State variables:
+#   0: info_quality  — quality score of information agent holds   (0=low, 1=high)
+#   1: peer_quality  — mean quality of information peers hold
+#   2: share_rate    — fraction of recent steps agent chose broadcast/share
+#   3: compliance    — recent constraint-compliance rate
+
+meta:
+  domain: info_sharing
+  description: >
+    Multi-agent information sharing with normative constraints on accuracy,
+    privacy, and communication overload.
+
+state_variables:
+  - {name: info_quality, index: 0, description: "Quality of agent's information (0-1)"}
+  - {name: peer_quality, index: 1, description: "Mean quality of peers' information (0-1)"}
+  - {name: share_rate,   index: 2, description: "Fraction of steps agent broadcast/shared"}
+  - {name: compliance,   index: 3, description: "Recent constraint-compliance rate"}
+
+actions:
+  - {index: 0, name: verify}     # verify information before sharing (prosocial)
+  - {index: 1, name: share}      # share current information
+  - {index: 2, name: broadcast}  # broadcast widely (antisocial — high overload risk)
+  - {index: 3, name: withhold}   # keep information to self (neutral)
+
+constraints:
+  - name: accuracy
+    description: >
+      An agent may not broadcast low-quality information.
+      Violation when broadcasting with info_quality below threshold.
+    trigger: {action: broadcast}
+    violation:
+      type: threshold_below
+      expr: "info_quality"
+      threshold: 0.60
+    weight: 0.4
+
+  - name: overload
+    description: >
+      Aggregate share rate must not exceed communication capacity.
+      Violation when own share_rate significantly exceeds peer share_rate.
+    trigger: always
+    violation:
+      type: threshold_above
+      expr: "share_rate - peer_quality"
+      threshold: 0.40
+    weight: 0.3
+
+  - name: quality_gap
+    description: >
+      Agent should not share when its information quality is far below peers.
+      Spreading low-quality information degrades collective knowledge.
+    trigger: {action: share}
+    violation:
+      type: threshold_above
+      expr: "peer_quality - info_quality"
+      threshold: 0.30
+    weight: 0.3

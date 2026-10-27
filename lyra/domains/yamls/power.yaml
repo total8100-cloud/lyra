@@ -1,0 +1,50 @@
+meta:
+  domain: power-grid-volt-var
+  standard: "IEC 61850, ANSI C84.1 Range A (+-5% nominal voltage)"
+  description: "Volt-Var control agent constraints for distribution grid"
+
+state_variables:
+  - {name: volt_dev,      index: 0}   # |V - V_nom| / V_nom (0-1)
+  - {name: q_ratio,       index: 1}   # Q / Q_rated (0-1)
+  - {name: loading_ratio, index: 2}   # line loading / thermal limit (0-1)
+  - {name: power_factor,  index: 3}   # 1 - pf deviation (0=unity pf, 1=worst)
+
+actions:
+  - {name: no_action, index: 0}
+  - {name: cap_on,    index: 1}   # switch capacitor bank on
+  - {name: cap_off,   index: 2}   # switch capacitor bank off
+  - {name: tap_raise, index: 3}   # raise transformer tap (+voltage)
+  - {name: tap_lower, index: 4}   # lower transformer tap (-voltage)
+
+constraints:
+  - name: voltage_band                # ANSI C84.1: voltage within +-5% nominal
+    trigger: always
+    violation:
+      type: threshold_above
+      expr: "volt_dev"
+      threshold: 0.05
+    weight: 2.0
+
+  - name: reactive_power_limit        # Q must not exceed 90% of rated capacity
+    trigger: {action: cap_on}
+    violation:
+      type: threshold_above
+      expr: "q_ratio"
+      threshold: 0.90
+    weight: 1.0
+
+  - name: thermal_overload            # line loading must stay below 90% thermal limit
+    trigger: always
+    violation:
+      type: threshold_above
+      expr: "loading_ratio"
+      threshold: 0.90
+    weight: 1.5
+
+  - name: power_factor_floor          # power factor must not fall below 0.90
+    trigger: always
+    violation:
+      type: threshold_above
+      expr: "power_factor"
+      threshold: 0.10
+    weight: 0.8

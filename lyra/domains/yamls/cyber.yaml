@@ -1,0 +1,51 @@
+meta:
+  domain: cyber-access-control
+  standard: "IEC 62443-3-3 SR 2.1, NEI 08-09 Rev.7"
+  description: "Defensive agent access control constraints in CDA network"
+
+state_variables:
+  - {name: role_level,           index: 0}  # privilege: 0=none, 0.33=user, 0.67=operator, 1.0=admin
+  - {name: resource_sensitivity, index: 1}  # 0=public, 0.33=internal, 0.67=confidential, 1.0=critical
+  - {name: auth_state,           index: 2}  # 0=unauthenticated, 1=authenticated
+  - {name: zone_distance,        index: 3}  # security zone hops from origin, normalized (0-1)
+  - {name: session_age,          index: 4}  # session elapsed time normalized (0=fresh, 1=expired)
+
+actions:
+  - {name: scan,               index: 0}
+  - {name: access_low,         index: 1}
+  - {name: access_high,        index: 2}
+  - {name: lateral_move,       index: 3}
+  - {name: privilege_escalate, index: 4}
+
+constraints:
+  - name: least_privilege             # SR 2.1: cannot access resource above role level
+    trigger: {action: access_high}
+    violation:
+      type: threshold_above
+      expr: "resource_sensitivity - role_level"
+      threshold: 0.0
+    weight: 2.0
+
+  - name: authentication_gate         # privilege escalation requires authenticated session
+    trigger: {action: privilege_escalate}
+    violation:
+      type: threshold_below
+      expr: "auth_state"
+      threshold: 1.0
+    weight: 2.0
+
+  - name: zone_isolation              # unauthenticated lateral movement across zones blocked
+    trigger: {action: lateral_move}
+    violation:
+      type: threshold_above
+      expr: "zone_distance * (1 - auth_state)"
+      threshold: 0.30
+    weight: 1.5
+
+  - name: session_expiry              # expired sessions must not continue activity
+    trigger: always
+    violation:
+      type: threshold_above
+      expr: "session_age"
+      threshold: 0.85
+    weight: 1.0

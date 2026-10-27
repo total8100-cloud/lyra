@@ -1,0 +1,57 @@
+meta:
+  domain: clinical-glucose-control
+  standard: "FDA 21 CFR Part 11, ADA Glycemic Targets 2024"
+  description: "Insulin dosing agent safety constraints for T1D management"
+
+state_variables:
+  - {name: bg_normalized, index: 0}   # (CGM - 70) / 330: 0=70mg/dL, 1=400mg/dL
+  - {name: iob_ratio,     index: 1}   # insulin_on_board / max_safe_iob (0-1)
+  - {name: bg_rate,       index: 2}   # BG rate of change normalized (-1=falling, +1=rising)
+  - {name: meal_flag,     index: 3}   # upcoming meal detected (0/1)
+
+actions:
+  - {name: no_dose,        index: 0}
+  - {name: micro_bolus,    index: 1}   # 0.5 U
+  - {name: standard_bolus, index: 2}   # 1-2 U
+  - {name: large_bolus,    index: 3}   # >2 U
+
+constraints:
+  - name: hypoglycemia_prevention     # block micro bolus when BG near-low (~100 mg/dL)
+    trigger: {action: micro_bolus}
+    violation:
+      type: threshold_below
+      expr: "bg_normalized"
+      threshold: 0.09
+    weight: 2.0
+
+  - name: hypoglycemia_large_dose     # require BG >= 160 mg/dL before large bolus
+    trigger: {action: large_bolus}
+    violation:
+      type: threshold_below
+      expr: "bg_normalized"
+      threshold: 0.27
+    weight: 2.0
+
+  - name: iob_cap_standard            # don't add standard bolus when IOB already high
+    trigger: {action: standard_bolus}
+    violation:
+      type: threshold_above
+      expr: "iob_ratio"
+      threshold: 0.75
+    weight: 1.5
+
+  - name: iob_cap_large               # don't add large bolus when IOB already high
+    trigger: {action: large_bolus}
+    violation:
+      type: threshold_above
+      expr: "iob_ratio"
+      threshold: 0.60
+    weight: 2.0
+
+  - name: falling_glucose_guard       # block standard bolus when BG is rapidly falling
+    trigger: {action: standard_bolus}
+    violation:
+      type: threshold_below
+      expr: "bg_rate"
+      threshold: -0.30
+    weight: 1.2

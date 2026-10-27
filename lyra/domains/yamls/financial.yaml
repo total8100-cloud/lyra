@@ -1,0 +1,49 @@
+meta:
+  domain: financial-trading
+  standard: "MiFID II (EU 2014/65/EU), ESMA Position Limits"
+  description: "Portfolio trading agent compliance constraints"
+
+state_variables:
+  - {name: position_ratio,   index: 0}   # single-asset weight in portfolio (0-1)
+  - {name: daily_loss_ratio, index: 1}   # cumulative daily loss / initial capital (0-1)
+  - {name: leverage_ratio,   index: 2}   # total exposure / equity, normalized (0-1, 1.0=3x)
+  - {name: volatility,       index: 3}   # 20-day realized volatility normalized (0-1)
+
+actions:
+  - {name: hold,  index: 0}
+  - {name: buy,   index: 1}
+  - {name: sell,  index: 2}
+  - {name: short, index: 3}
+
+constraints:
+  - name: position_concentration      # MiFID II: single asset <= 10% of portfolio
+    trigger: {action: buy}
+    violation:
+      type: threshold_above
+      expr: "position_ratio"
+      threshold: 0.10
+    weight: 1.0
+
+  - name: daily_loss_limit            # max 5% daily loss of initial capital
+    trigger: always
+    violation:
+      type: threshold_above
+      expr: "daily_loss_ratio"
+      threshold: 0.05
+    weight: 1.5
+
+  - name: leverage_cap                # max 2x leverage (0.67 normalized = 2x of 3x max)
+    trigger: {action: buy}
+    violation:
+      type: threshold_above
+      expr: "leverage_ratio"
+      threshold: 0.67
+    weight: 1.0
+
+  - name: volatility_guard            # restrict short selling in high-volatility regime
+    trigger: {action: short}
+    violation:
+      type: threshold_above
+      expr: "volatility * leverage_ratio"
+      threshold: 0.30
+    weight: 0.8

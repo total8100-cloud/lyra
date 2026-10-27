@@ -1,0 +1,81 @@
+# Lyra-DRL Constraint Specification — CartSafe Domain
+#
+# Standard CartPole-v1 extended with a 3rd "hold" action (zero force).
+# Safety constraints encode directional safety: pushing the pole further
+# from vertical when it is already in the danger zone is a violation.
+#
+# This domain demonstrates the WARN-zone phenomenon in a well-known
+# benchmark without custom environment engineering.
+#
+# State variables (passed to verifier as normalised floats):
+#   0: cart_pos   — cart position (raw, m); episode ends at ±2.4
+#   1: cart_vel   — cart velocity (m/s, clipped ±5)
+#   2: pole_angle — pole angle from vertical (radians); episode ends at ±0.2095
+#   3: pole_angvel— pole angular velocity (rad/s, clipped ±5)
+#
+# Actions:
+#   0: push_left  — apply −10 N force (correct when pole leans left)
+#   1: push_right — apply +10 N force (correct when pole leans right)
+#   2: hold       — apply 0 N force (safe baseline)
+
+meta:
+  domain: cartsafe
+  description: >
+    CartPole with directional safety constraints.
+    Violation occurs when the agent reinforces the pole's lean
+    (pushes in the direction of fall) while the pole is in the
+    intermediate-danger (WARN) zone.
+
+state_variables:
+  - {name: cart_pos,    index: 0, description: "Cart position (m)"}
+  - {name: cart_vel,    index: 1, description: "Cart velocity (m/s)"}
+  - {name: pole_angle,  index: 2, description: "Pole angle from vertical (rad)"}
+  - {name: pole_angvel, index: 3, description: "Pole angular velocity (rad/s)"}
+
+actions:
+  - {index: 0, name: push_left}
+  - {index: 1, name: push_right}
+  - {index: 2, name: hold}
+
+constraints:
+  # C1: Unsafe right push — reinforcing a rightward lean
+  - name: unsafe_right_push
+    description: >
+      Pushing right when the pole is already leaning right (angle > 0)
+      and entering the danger zone accelerates the fall.
+      Violation when push_right AND pole_angle exceeds WARN threshold.
+    trigger: {action: push_right}
+    violation:
+      type: threshold_above
+      expr: "pole_angle"
+      threshold: 0.08     # radians — start of WARN zone
+    weight: 0.5
+    k: 8.0
+
+  # C2: Unsafe left push — reinforcing a leftward lean
+  - name: unsafe_left_push
+    description: >
+      Pushing left when the pole is already leaning left (angle < 0)
+      and entering the danger zone accelerates the fall.
+      Violation when push_left AND pole_angle below negative WARN threshold.
+    trigger: {action: push_left}
+    violation:
+      type: threshold_below
+      expr: "pole_angle"
+      threshold: -0.08    # radians — start of negative WARN zone
+    weight: 0.5
+    k: 8.0
+
+  # C3: Absolute angle danger — always active near episode limit
+  - name: angle_danger
+    description: >
+      When the pole angle is close to the episode-termination limit (±0.2095 rad),
+      any action is risky. This trigger-always constraint encodes the absolute
+      danger zone independent of action choice.
+    trigger: always
+    violation:
+      type: abs_threshold
+      expr: "pole_angle"
+      threshold: 0.15     # radians — 72% of episode-termination limit
+    weight: 0.3
+    k: 8.0
